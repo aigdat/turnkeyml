@@ -10,7 +10,7 @@ from statistics import mean
 import platform
 import turnkeyml.run.plugin_helpers as plugin_helpers
 
-ORT_VERSION = "1.15.1"
+COREML_VERSION = "7.1"
 
 BATCHSIZE = 1
 
@@ -23,10 +23,6 @@ def create_conda_env(conda_env_name: str):
             "CONDA_EXE environment variable not set."
             "Make sure Conda is properly installed."
         )
-
-    # Normalize the path for Windows
-    if platform.system() == "Windows":
-        conda_path = os.path.normpath(conda_path)
 
     env_path = os.path.join(
         os.path.dirname(os.path.dirname(conda_path)), "envs", conda_env_name
@@ -53,13 +49,13 @@ def create_conda_env(conda_env_name: str):
         conda_env_name,
         "pip",
         "install",
-        f"onnxruntime=={ORT_VERSION}",
+        f"coremltools=={COREML_VERSION}",
     ]
     plugin_helpers.run_subprocess(setup_cmd)
 
 
 def execute_benchmark(
-    onnx_file: str,
+    coreml_file_path: str,
     outputs_file: str,
     output_dir: str,
     conda_env_name: str,
@@ -69,13 +65,13 @@ def execute_benchmark(
 
     python_in_env = plugin_helpers.get_python_path(conda_env_name)
     iterations_file = os.path.join(output_dir, "per_iteration_latency.json")
-    benchmarking_log_file = os.path.join(output_dir, "ort_benchmarking_log.txt")
+    benchmarking_log_file = os.path.join(output_dir, "coreml_benchmarking_log.txt")
 
     cmd = [
         python_in_env,
         os.path.join(output_dir, "within_conda.py"),
-        "--onnx-file",
-        onnx_file,
+        "--coreml-file",
+        coreml_file_path,
         "--iterations",
         str(iterations),
         "--iterations-file",
@@ -101,7 +97,7 @@ def execute_benchmark(
         )
 
     cpu_performance = get_cpu_specs()
-    cpu_performance["OnnxRuntime Version"] = str(ORT_VERSION)
+    cpu_performance["CoreML Version"] = str(COREML_VERSION)
     cpu_performance["Mean Latency(ms)"] = str(mean(per_iteration_latency) * 1000)
     cpu_performance["Throughput"] = str(BATCHSIZE / mean(per_iteration_latency))
     cpu_performance["Min Latency(ms)"] = str(min(per_iteration_latency) * 1000)
@@ -112,39 +108,12 @@ def execute_benchmark(
 
 
 def get_cpu_specs() -> dict:
-    # Define a common field mapping for both Windows and Linux
-    field_mapping = {
-        "Architecture": "CPU Architecture",
-        "Manufacturer": "CPU Vendor",
-        "MaxClockSpeed": "CPU Max Frequency (MHz)",
-        "Name": "CPU Name",
-        "NumberOfCores": "CPU Core Count",
-        "Model name": "CPU Name",  # Additional mapping for Linux
-        "CPU MHz": "CPU Max Frequency (MHz)",  # Additional mapping for Linux
-        "CPU(s)": "CPU Core Count",  # Additional mapping for Linux
-        "Vendor ID": "CPU Vendor",
-    }
-
     # Check the operating system and define the command accordingly
-    system_platform = platform.system()
-    if system_platform == "Windows":
-        cpu_info_command = (
-            "wmic CPU get Architecture,Manufacturer,MaxClockSpeed,"
-            "Name,NumberOfCores /format:list"
-        )
+    if platform.system() != "Darwin":
+        raise OSError("You must se MacOS to run models with CoreML.")
 
-        cpu_info = subprocess.Popen(
-            cpu_info_command, stdout=subprocess.PIPE, shell=True
-        )
-        separator = "="
-    elif system_platform == "Darwin":
-        cpu_info_command = "sysctl -n machdep.cpu.brand_string"
-        cpu_info = subprocess.Popen(cpu_info_command.split(), stdout=subprocess.PIPE)
-    else:
-        cpu_info_command = "lscpu"
-        cpu_info = subprocess.Popen(cpu_info_command.split(), stdout=subprocess.PIPE)
-        separator = ":"
-
+    cpu_info_command = "sysctl -n machdep.cpu.brand_string"
+    cpu_info = subprocess.Popen(cpu_info_command.split(), stdout=subprocess.PIPE)
     cpu_info_output, _ = cpu_info.communicate()
     if not cpu_info_output:
         raise EnvironmentError(
@@ -152,23 +121,8 @@ def get_cpu_specs() -> dict:
             "Please make sure this tool is correctly installed on your system before continuing."
         )
 
-    decoded_info = (
-        cpu_info_output.decode()
-        .strip()
-        .split("\r\n" if system_platform == "Windows" else "\n")
-    )
-
-    # Initialize an empty dictionary to hold the CPU specifications
-    cpu_spec = {}
-    if system_platform != "Darwin":
-        for line in decoded_info:
-            key, value = line.split(separator, 1)
-            # Get the corresponding key from the field mapping
-            key = field_mapping.get(key.strip())
-            if key:
-                # Add the key and value to the CPU specifications dictionary
-                cpu_spec[key] = value.strip()
-    else:
-        cpu_spec["CPU Name"] = decoded_info[0]
+    # Store CPU specifications
+    decoded_info = cpu_info_output.decode().strip().split("\n")
+    cpu_spec = {"CPU Name": decoded_info[0]}
 
     return cpu_spec

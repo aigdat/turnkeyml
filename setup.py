@@ -18,6 +18,7 @@ setup(
         "turnkeyml.run.onnxrt",
         "turnkeyml.run.tensorrt",
         "turnkeyml.run.torchrt",
+        "turnkeyml.run.coreml",
         "turnkeyml.cli",
         "turnkeyml.common",
         "turnkeyml_models",
@@ -46,6 +47,7 @@ setup(
         "pandas>=1.5.3",
         "fasteners",
         "GitPython>=3.1.40",
+        "coremltools>=7.1",
     ],
     extras_require={
         "tensorflow": [

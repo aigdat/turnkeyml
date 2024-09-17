@@ -32,6 +32,15 @@ onnx_fp32 = stage.Sequence(
     enable_model_validation=True,
 )
 
+coreml = stage.Sequence(
+    "coreml",
+    "CoreML Sequence",
+    [
+        export.ExportToCoreML(),
+    ],
+    enable_model_validation=True,
+)
+
 # Plugin interface for sequences
 discovered_plugins = plugins.discover()
 
@@ -40,6 +49,7 @@ SUPPORTED_SEQUENCES = {
     "optimize-fp16": optimize_fp16,
     "optimize-fp32": optimize_fp32,
     "onnx-fp32": onnx_fp32,
+    "coreml": coreml,
 }
 
 # Add sequences from plugins to supported sequences dict
